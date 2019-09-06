@@ -4,7 +4,7 @@
 \alias{pairEff}
 \title{Calculates pairwise efficiency}
 \usage{
-pairEff(filename)
+pairEff(filename, modtype)
 }
 \description{
 Calculates pairwise efficiency

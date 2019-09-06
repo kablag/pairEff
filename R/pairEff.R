@@ -27,6 +27,7 @@ pE <- function(dilutionRate,
 pairEff <- function(filename, modtype) {
   inptw <- read_excel(filename)
 
+  cat("Fitting models\n")
   fits <- modlist(inptw, 1, 2:ncol(inptw),
                   model = modtype, verbose = FALSE)
   names(fits) <- colnames(inptw)[-1]
@@ -35,36 +36,53 @@ pairEff <- function(filename, modtype) {
     inptw[[cname]] <- fits[[cname]]$m$predict()
   }
 
+  cat("Add conc sets\n")
   inptl <- gather(inptw, "Well", "RFU", -Cycle)
   inptl$conc <- rep(rep(c(100, 50, 25, 12, 6, 3), each = max(inptl$Cycle)), 16)
   # maxConc <- max(inptl$conc)
   # inptl$dilution <- log(maxConc / inptl$conc, base = 2)
   inptl$set <- rep(sprintf("Set%02i", c(1:16)), each = max(inptl$Cycle) * 6)
 
-
-
-  finptl <- inptl %>%
+  cat("Filter curves regions\n")
+  # browser()
+  inptl <- inptl %>%
     group_by(Well) %>%
     mutate(#fTop = RFU[takeoff(fits[[Well[1]]])$top + 1],
       #top = takeoff(fits[[Well[1]]])$top,
-      fmidp = midpoint(fits[[Well[1]]])$f.mp,
-      fcpD1 = efficiency(fits[[Well[1]]], type = "cpD1", plot = FALSE)$fluo) %>%
+      # fmidp = midpoint(fits[[Well[1]]])$f.mp,
+      fcpD2 = efficiency(fits[[Well[1]]], type = "cpD2", plot = FALSE)$fluo,
+      fcpD1 = efficiency(fits[[Well[1]]], type = "cpD1", plot = FALSE)$fluo
+      # ,
+      # cpD2 = efficiency(fits[[Well[1]]], type = "cpD2", plot = FALSE)$cpD2,
+      # cpD1 = efficiency(fits[[Well[1]]], type = "cpD1", plot = FALSE)$cpD1
+      # ,
+      # usePoint = RFU >= fcpD2[1] & RFU <= fcpD1[1]) %>%
+      # usePoint =
+        # Cycle >= (cpD2[1] - 1) & Cycle <= (cpD1[1] + 1)
+      ) %>%
     group_by(set) %>%
     mutate(
       # usePoint = RFU >= (min(fmidp) * 1.1) &
         # RFU <= (max(fcpD1) * 0.9)
-      usePoint = RFU >= min(fmidp) & RFU <= max(fcpD1)
-    ) %>%
-    filter(usePoint)
+      # usePoint = RFU >= min(fmidp) & RFU <= max(fcpD1)
+      usePoint = RFU >= (min(fcpD2) - (max(fcpD1) - min(fcpD2)) * 0.1) &
+        RFU <= (max(fcpD1) + (max(fcpD1) - min(fcpD2)) * 0.1)
+      # usePoint = Cycle >= min(cpD2) & Cycle <= max(cpD1)
+    )
 
   finptl <- inptl %>%
+    filter(usePoint)
+
+  # finptl <- inptl %>%
     # filter(RFU > 100 & RFU < 300)
-    filter(RFU > 20 & RFU < 180)
+    # filter(RFU > 20 & RFU < 180)
+  cat("Filter pEs\n")
   toInclude <- function(pes) {
     pEsummary <- summary(pes)
-    pes > pEsummary[2] & pes < pEsummary[5]
+    pes >= pEsummary[2] & pes <= pEsummary[5]
   }
 
+  cat("Calc pEs\n")
   pEtbl <-
     map_dfr(finptl$set %>% unique,
             function(cset) {
@@ -103,10 +121,14 @@ pairEff <- function(filename, modtype) {
                   F0 = RFU_i / ((1 + pE) ^ Cycle_i),
                   include = toInclude(pE)
                 )
+              # %>%
+              #   group_by(Well_i) %>%
+              #   mutate(F0 = RFU_i[pE == max(pE)] /
+              #            ((1 + max(pE)) ^ Cycle_i[pE == max(pE)]))
             })
 
 
-
+  cat("Calc results\n")
   result <- pEtbl %>%
     # mutate(include = pE > 0.6 & pE < 1.05) %>%
     group_by(set) %>%
@@ -120,6 +142,6 @@ pairEff <- function(filename, modtype) {
     )
   list(pEtbl = pEtbl,
        result = result,
-       finptl = finptl,
+       inptl = inptl,
        mods = fits)
 }
