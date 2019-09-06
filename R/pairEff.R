@@ -1,19 +1,18 @@
 # pE <- function(dilutionRate,
+#                 dilutionDelta,
 #                RFU_i, RFU_j,
-#                dilution_i, dilution_j,
 #                cycle_i, cycle_j) {
 #   (dilutionRate ^ (((log(RFU_j, base = dilutionRate)
-#                       - log(RFU_i, base = dilutionRate)) +
-#            (dilution_j - dilution_i)) /
-#           (cycle_j - cycle_i))) - 1
+#                      - log(RFU_i, base = dilutionRate)) +
+#                       dilutionDelta) /
+#                      (cycle_j - cycle_i))) - 1
 # }
 
 pE <- function(dilutionRate,
-                dilutionDelta,
+               dilutionDelta,
                RFU_i, RFU_j,
                cycle_i, cycle_j) {
-  (dilutionRate ^ (((log(RFU_j, base = dilutionRate)
-                     - log(RFU_i, base = dilutionRate)) +
+  (dilutionRate ^ ((log(RFU_j/RFU_i, base = dilutionRate) +
                       dilutionDelta) /
                      (cycle_j - cycle_i))) - 1
 }
@@ -25,15 +24,47 @@ pE <- function(dilutionRate,
 #' @import tidyverse
 #' @importFrom readxl read_excel
 #' @export
-pairEff <- function(filename) {
+pairEff <- function(filename, modtype) {
   inptw <- read_excel(filename)
+
+  fits <- modlist(inptw, 1, 2:ncol(inptw),
+                  model = modtype, verbose = FALSE)
+  names(fits) <- colnames(inptw)[-1]
+
+  for (cname in names(fits)) {
+    inptw[[cname]] <- fits[[cname]]$m$predict()
+  }
+
   inptl <- gather(inptw, "Well", "RFU", -Cycle)
   inptl$conc <- rep(rep(c(100, 50, 25, 12, 6, 3), each = max(inptl$Cycle)), 16)
   # maxConc <- max(inptl$conc)
   # inptl$dilution <- log(maxConc / inptl$conc, base = 2)
   inptl$set <- rep(sprintf("Set%02i", c(1:16)), each = max(inptl$Cycle) * 6)
+
+
+
   finptl <- inptl %>%
+    group_by(Well) %>%
+    mutate(#fTop = RFU[takeoff(fits[[Well[1]]])$top + 1],
+      #top = takeoff(fits[[Well[1]]])$top,
+      fmidp = midpoint(fits[[Well[1]]])$f.mp,
+      fcpD1 = efficiency(fits[[Well[1]]], type = "cpD1", plot = FALSE)$fluo) %>%
+    group_by(set) %>%
+    mutate(
+      # usePoint = RFU >= (min(fmidp) * 1.1) &
+        # RFU <= (max(fcpD1) * 0.9)
+      usePoint = RFU >= min(fmidp) & RFU <= max(fcpD1)
+    ) %>%
+    filter(usePoint)
+
+  finptl <- inptl %>%
+    # filter(RFU > 100 & RFU < 300)
     filter(RFU > 20 & RFU < 180)
+  toInclude <- function(pes) {
+    pEsummary <- summary(pes)
+    pes > pEsummary[2] & pes < pEsummary[5]
+  }
+
   pEtbl <-
     map_dfr(finptl$set %>% unique,
             function(cset) {
@@ -54,7 +85,7 @@ pairEff <- function(filename) {
                 left_join(fdj, by = "j") %>%
                 rename(i = i.x, set = set_i) %>%
                 filter(Cycle_i != Cycle_j) %>%
-                select(-j.y, -i.y, -set_j) %>%
+                dplyr::select(-j.y, -i.y, -set_j) %>%
                 mutate(
                   dilutionRate = ifelse(conc_i == conc_j, # one dilution
                                         2,
@@ -66,15 +97,20 @@ pairEff <- function(filename) {
                                          ifelse(conc_i > conc_j,
                                                 1, -1)),
                   pE = pE(dilutionRate,
-                          dilutionDelta,
-                          RFU_i, RFU_j,
-                          Cycle_i, Cycle_j),
-                  F0 = RFU_i / ((1 + pE) ^ Cycle_i)
+                            dilutionDelta,
+                            RFU_i, RFU_j,
+                            Cycle_i, Cycle_j),
+                  F0 = RFU_i / ((1 + pE) ^ Cycle_i),
+                  include = toInclude(pE)
                 )
             })
+
+
+
   result <- pEtbl %>%
-    mutate(include = pE > 0.6 & pE < 1.05) %>%
+    # mutate(include = pE > 0.6 & pE < 1.05) %>%
     group_by(set) %>%
+    # filter(include) %>%
     summarise(mean_pE = mean(pE[include]),
               sd_pE = sd(pE[include]),
               mean_F0 = mean(F0[include]),
@@ -83,5 +119,7 @@ pairEff <- function(filename) {
               includeN = sum(include)
     )
   list(pEtbl = pEtbl,
-       result = result)
+       result = result,
+       finptl = finptl,
+       mods = fits)
 }
