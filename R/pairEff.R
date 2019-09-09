@@ -140,6 +140,18 @@ pairEff <- function(filename, modtype) {
               totalN = n(),
               includeN = sum(include)
     )
+  for (x in 0:3) {
+    result[result$set %in%
+             sprintf("Set%02i", c(1 + x*2, 2 + x*2, 9 + x*2, 10 + x*2)),
+           "group"] <- x + 1
+
+  }
+
+  result <- result %>%
+    group_by(group) %>%
+    mutate(group_pE = mean(mean_pE)) %>%
+    group_by(set) %>%
+    mutate(ratio = mean_pE / group_pE)
   list(pEtbl = pEtbl,
        result = result,
        inptl = inptl,
