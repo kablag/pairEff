@@ -32,8 +32,12 @@ pairEff <- function(filename, modtype) {
                   model = modtype, verbose = FALSE)
   names(fits) <- colnames(inptw)[-1]
 
+  # ncycles <- max(inptw$Cycle)
+  # inptw <-  data.frame(Cycle = seq(1, ncycles, length.out = ncycles * 5))
   for (cname in names(fits)) {
     inptw[[cname]] <- fits[[cname]]$m$predict()
+    # inptw[[cname]] <- fits[[cname]]$m$predict(newdata = data.frame(Cycles=seq(1, ncycles,
+                                                                              # length.out = ncycles * 5) ))
   }
 
   cat("Add conc sets\n")
@@ -50,23 +54,26 @@ pairEff <- function(filename, modtype) {
     mutate(#fTop = RFU[takeoff(fits[[Well[1]]])$top + 1],
       #top = takeoff(fits[[Well[1]]])$top,
       # fmidp = midpoint(fits[[Well[1]]])$f.mp,
-      fcpD2 = efficiency(fits[[Well[1]]], type = "cpD2", plot = FALSE)$fluo,
-      fcpD1 = efficiency(fits[[Well[1]]], type = "cpD1", plot = FALSE)$fluo
+      # fcpD2 = efficiency(fits[[Well[1]]], type = "cpD2", plot = FALSE)$fluo,
+      # fcpD1 = efficiency(fits[[Well[1]]], type = "cpD1", plot = FALSE)$fluo
       # ,
-      # cpD2 = efficiency(fits[[Well[1]]], type = "cpD2", plot = FALSE)$cpD2,
-      # cpD1 = efficiency(fits[[Well[1]]], type = "cpD1", plot = FALSE)$cpD1
-      # ,
+      cpD2 = efficiency(fits[[Well[1]]], type = "cpD2", plot = FALSE)$cpD2,
+      cpD1 = efficiency(fits[[Well[1]]], type = "cpD1", plot = FALSE)$cpD1
+      ,
       # usePoint = RFU >= fcpD2[1] & RFU <= fcpD1[1]) %>%
-      # usePoint =
-        # Cycle >= (cpD2[1] - 1) & Cycle <= (cpD1[1] + 1)
+      usePoint = Cycle >= cpD2[1] & Cycle <= cpD1[1]
+      # usePoint = RFU >= (fcpD2  + fcpD2 * 0.1) &
+      #   RFU <= (fcpD1 - fcpD1 * 0.1)
       ) %>%
     group_by(set) %>%
     mutate(
       # usePoint = RFU >= (min(fmidp) * 1.1) &
         # RFU <= (max(fcpD1) * 0.9)
       # usePoint = RFU >= min(fmidp) & RFU <= max(fcpD1)
-      usePoint = RFU >= (min(fcpD2) - (max(fcpD1) - min(fcpD2)) * 0.1) &
-        RFU <= (max(fcpD1) + (max(fcpD1) - min(fcpD2)) * 0.1)
+      # usePoint = RFU >= (min(fcpD2) - (max(fcpD1) - min(fcpD2)) * 0.1) &
+      #   RFU <= (max(fcpD1) + (max(fcpD1) - min(fcpD2)) * 0.1)
+      # usePoint = RFU >= (min(fcpD2)  + min(fcpD2) * 0.1) &
+      #   RFU <= (max(fcpD1) - max(fcpD1) * 0.1)
       # usePoint = Cycle >= min(cpD2) & Cycle <= max(cpD1)
     )
 
