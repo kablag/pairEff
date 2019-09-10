@@ -32,23 +32,24 @@ pairEff <- function(filename, modtype) {
                   model = modtype, verbose = FALSE)
   names(fits) <- colnames(inptw)[-1]
 
-  # ncycles <- max(inptw$Cycle)
-  # inptw <-  data.frame(Cycle = seq(1, ncycles, length.out = ncycles * 5))
+  ncycles <- max(inptw$Cycle)
+  lcycles <- ncycles * 4
+  inptw <-  data.frame(Cycle = seq(1, ncycles, length.out = lcycles))
   for (cname in names(fits)) {
-    inptw[[cname]] <- fits[[cname]]$m$predict()
-    # inptw[[cname]] <- fits[[cname]]$m$predict(newdata = data.frame(Cycles=seq(1, ncycles,
-                                                                              # length.out = ncycles * 5) ))
+    # inptw[[cname]] <- fits[[cname]]$m$predict()
+    inptw[[cname]] <- fits[[cname]]$m$predict(newdata = data.frame(Cycles=seq(1, ncycles,
+                                                                              length.out = lcycles) ))
   }
 
   cat("Add conc sets\n")
   inptl <- gather(inptw, "Well", "RFU", -Cycle)
-  inptl$conc <- rep(rep(c(100, 50, 25, 12, 6, 3), each = max(inptl$Cycle)), 16)
+  inptl$conc <- rep(rep(c(100, 50, 25, 12, 6, 3), each = lcycles), 16)
   # maxConc <- max(inptl$conc)
   # inptl$dilution <- log(maxConc / inptl$conc, base = 2)
-  inptl$set <- rep(sprintf("Set%02i", c(1:16)), each = max(inptl$Cycle) * 6)
+  inptl$set <- rep(sprintf("Set%02i", c(1:16)), each = lcycles * 6)
 
   cat("Filter curves regions\n")
-  # browser()
+  browser()
   inptl <- inptl %>%
     group_by(Well) %>%
     mutate(#fTop = RFU[takeoff(fits[[Well[1]]])$top + 1],
@@ -61,7 +62,7 @@ pairEff <- function(filename, modtype) {
       cpD1 = efficiency(fits[[Well[1]]], type = "cpD1", plot = FALSE)$cpD1
       ,
       # usePoint = RFU >= fcpD2[1] & RFU <= fcpD1[1]) %>%
-      usePoint = Cycle >= cpD2[1] & Cycle <= cpD1[1]
+      usePoint = Cycle >= (cpD2[1] - 1) & Cycle <= (cpD1[1] + 1)
       # usePoint = RFU >= (fcpD2  + fcpD2 * 0.1) &
       #   RFU <= (fcpD1 - fcpD1 * 0.1)
       ) %>%
