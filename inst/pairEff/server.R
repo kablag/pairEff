@@ -31,7 +31,7 @@ shinyServer(function(input, output, session) {
 
   output$includedPoints <- renderPlot({
     req(pEff(), input$includedPointsSet)
-    peff <<- pEff()
+    # peff <<- pEff()
     if (input$showIncluded) {
       ggplot(pEff()$inptl %>%
                filter(set == input$includedPointsSet & usePoint) %>%

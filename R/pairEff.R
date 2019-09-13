@@ -46,10 +46,11 @@ pairEff <- function(filename, modtype) {
   inptl$conc <- rep(rep(c(100, 50, 25, 12, 6, 3), each = ncycles), 16)
   # maxConc <- max(inptl$conc)
   # inptl$dilution <- log(maxConc / inptl$conc, base = 2)
-  inptl$set <- rep(sprintf("Set%02i", c(1:16)), each = ncycles * 6)
+  inptl$set <- rep(
+    paste0(rep(LETTERS[1:8], each = 2), c("01-06", "07-12"))
+    , each = ncycles * 6)
 
   cat("Filter curves regions\n")
-  # browser()
   inptl <- inptl %>%
     group_by(Well) %>%
     mutate(#fTop = RFU[takeoff(fits[[Well[1]]])$top + 1],
@@ -148,11 +149,11 @@ pairEff <- function(filename, modtype) {
               totalN = n(),
               includeN = sum(include)
     )
-  for (x in 0:3) {
-    result[result$set %in%
-             sprintf("Set%02i", c(1 + x*2, 2 + x*2, 9 + x*2, 10 + x*2)),
-           "group"] <- x + 1
 
+  for (x in 1:4) {
+    result[result$set %in%
+             paste0(rep(LETTERS[c(x, x + 4)], each = 2), c("01-06", "07-12")),
+           "group"] <- x
   }
 
   result <- result %>%
