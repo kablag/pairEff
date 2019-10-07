@@ -15,9 +15,9 @@ ui <- fluidPage(
   fileInput("xlsFile", "xls"),
   fluidRow(
     column(6,
-           selectInput("includedPointsSet", "Set", ""),
-           checkboxInput("showIncluded", "Show included points only"),
-           plotOutput("includedPoints")),
+           selectInput("pointsSet", "Set", ""),
+           checkboxInput("showInRange", "Show in range points only"),
+           plotOutput("pointsPlot")),
     column(6,
            pickerInput("densitySets", "Sets", choices = "",
                        multiple = TRUE,

@@ -166,3 +166,61 @@ pairEff <- function(filename, modtype) {
        inptl = inptl,
        mods = fits)
 }
+
+detectIndividualStartPoint2 <- function(ampCurve, cycLag = 5, npoints = 4, plotResult = FALSE) {
+  # mods <- sapply(cycLag:length(ampCurve), function(cyc) {
+  mods <- sapply(cycLag:length(ampCurve), function(cyc) {
+    cycles <- 1:cyc
+    fluor <- ampCurve[cycles]
+    lm(fluor ~ cycles)$coefficients["cycles"]
+    # mod <- lm(fluor ~ cycles)
+    # predict(mod, data.frame(cycles = cyc + cycLag))
+  })
+  names(mods) <- cycLag:length(ampCurve)
+  # print(mods)
+  for (cyc in 1:(length(mods) - npoints)) {
+    tmods <- mods[cyc:(cyc + npoints)]
+    if (tmods[1] > 0 &&
+        length(unique(round(tmods, 5))) == length(tmods) &&
+        !is.unsorted(tmods)) {
+      if (plotResult) {
+        plot(ampCurve)
+        points(cyc + cycLag, ampCurve[cyc + cycLag], col = "red")
+      }
+      return(list(takeoffC = cyc + cycLag - 1,
+                  takeoffF = ampCurve[cyc + cycLag - 1]))
+    }
+  }
+}
+
+# lines(predict(lm(inptw$G11[1:9] ~ inptw$Cycle[1:9])))
+
+
+detectIndividualStartPoint <- function(fPoints, pval = 0.05, nsig = 3)
+{
+  cycles <- seq_along(fPoints)
+  res <- sapply(5:length(cycles),
+                function(i) {
+                  mod <- lm(fPoints[1:i] ~ cycles[1:i], na.action = na.exclude)
+                  1 - pt(tail(rstudent(mod), 1), df = mod$df.residual)
+                })
+  sig <- sapply(res, function(x) x < pval)
+  sig[is.na(sig)] <- FALSE
+  selTakeoff <- sapply(1:length(sig),
+                       function(x) all(sig[x:(x + nsig - 1)]))
+  minTakeoff <- min(which(selTakeoff == TRUE), na.rm = TRUE)
+  takeoffC <- as.numeric(names(sig[minTakeoff]))
+  takeoffF <- fPoints[takeoffC]
+  return(list(takeoffC = takeoffC, takeoffF = takeoffF))
+}
+
+detectGlobalStartPoint <- function(tbl) {
+  meanFBeforeTakeoffFs <- tbl[RFU <= takeoffF, mean(RFU)]
+  FBeforeTakeoffFs <- tbl[RFU <= takeoffF, sort(RFU)]
+  tail(FBeforeTakeoffFs[FBeforeTakeoffFs < (meanFBeforeTakeoffFs * 4)], 1) * 2
+}
+detectGlobalStartPoint2 <- function(tbl) {
+  meanFBeforeTakeoffFs <- tbl[RFU <= takeoffF2, mean(RFU)]
+  FBeforeTakeoffFs <- tbl[RFU <= takeoffF2, sort(RFU)]
+  tail(FBeforeTakeoffFs[FBeforeTakeoffFs < (meanFBeforeTakeoffFs * 4)], 1) * 2
+}
