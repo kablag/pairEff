@@ -50,8 +50,9 @@ detectGlobalEndPoint <- function(derMaxF) {
 #'
 #' Calculates pairwise efficiency
 #'
-#' @import tidyverse
+#' @import magrittr data.table
 #' @importFrom readxl read_excel
+#' @importFrom moments kurtosis
 #' @export
 pairEff2 <- function(filename) {
   # read table
@@ -129,7 +130,8 @@ pairEff2 <- function(filename) {
               includedN = .N), by = set]
   gTbl[, F0 := RFU.i / ((1 + pE) ^ Cycle.i)][
     , ':='(mean_F0 = mean(F0),
-           sd_F0 = sd(F0)),
+           sd_F0 = sd(F0),
+           kurtosis = kurtosis(pE)),
     by = "set"
     ]
   # browser()
@@ -142,6 +144,9 @@ pairEff2 <- function(filename) {
      }, {if (any(mean_F0 > geneStartPoint[1]))
        "Possibly bad data: F0 > working range start point;"
        else ""
+     }, {if (kurtosis[1] < 1)
+       "Possibly bad data: excess kurtosis < 1;"
+       else ""
      })
   }, by = set]
 
@@ -149,6 +154,7 @@ pairEff2 <- function(filename) {
                          mean_pE, mean_pE2, sd_pE2,
                          mean_F0, sd_F0,
                          totalN, includedN,
+                         kurtosis,
                          errors)],
                 by = "set")
   list(

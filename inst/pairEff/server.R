@@ -15,7 +15,6 @@ library(qpcR)
 
 # source("../../R/pairEff2.R")
 
-# Define server logic required to draw a histogram
 shinyServer(function(input, output, session) {
   pEff <- reactive({
     req(input$xlsFile)
