@@ -1,12 +1,3 @@
-#
-# This is the server logic of a Shiny web application. You can run the
-# application by clicking 'Run App' above.
-#
-# Find out more about building applications with Shiny here:
-#
-#    http://shiny.rstudio.com/
-#
-
 library(shiny)
 library(shinyWidgets)
 library(pairEff)
@@ -16,10 +7,34 @@ library(qpcR)
 # source("../../R/pairEff2.R")
 
 shinyServer(function(input, output, session) {
+  session$onSessionEnded(function() {
+    stopApp()
+  })
+
+  inputfile <- reactiveVal()
+
+  observeEvent(
+    input$exmplFile,
+    {
+      inputfile(list(
+        name = "Gapdh-Got1-Gtf2-Gusb -  rfu.xls",
+        datapath = paste0(path.package("pairEff"), "/extdata/", "Gapdh-Got1-Gtf2-Gusb -  rfu.xls")
+      ))
+    }
+  )
+  observeEvent(
+    input$inputFile,
+    {
+      inputfile(input$inputFile)
+    }
+  )
+
   pEff <- reactive({
-    req(input$xlsFile)
+    req(inputfile())
     # pEff <- pairEff(input$xlsFile$datapath, l6)
-    pEff <- pairEff2(input$xlsFile$datapath)
+    withProgress(message = 'Calculating pairwise efficiency...', value = 0, {
+      pEff <- pairEff2(inputfile()$datapath)
+    })
     updateSelectInput(session,
                       "pointsSet",
                       choices = pEff$result$set,
