@@ -89,13 +89,13 @@ pairEff2 <- function(filename) {
 
   gTbl <- rbindlist(
     lapply(unique(inptlf$set), function(setName) {
-      do.call(cbind.data.frame,Map(expand.grid,
+      do.call(cbind.data.frame, Map(expand.grid,
                                    i = inptlf[set == setName],
                                    j = inptlf[set == setName]))
     }
     )
   )
-  gTbl <- data.table(gTbl)[Cycle.i != Cycle.j][
+  gTbl <- data.table(gTbl)[Cycle.i < Cycle.j][
     , -c("set.j", "gene.j", "geneStartPoint.j", "geneEndPoint.j")
     ]
   colnames(gTbl)[colnames(gTbl) %in% c("set.i", "gene.i", "geneStartPoint.i", "geneEndPoint.i")] <-

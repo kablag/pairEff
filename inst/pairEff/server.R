@@ -41,7 +41,8 @@ shinyServer(function(input, output, session) {
       geom_point(aes(x = takeoffC, y = takeoffF, color = as.factor(conc))) +
       geom_point(aes(x = derMaxC, y = derMaxF, color = as.factor(conc))) +
       geom_hline(aes(yintercept = geneStartPoint)) +
-      geom_hline(aes(yintercept = geneEndPoint))
+      geom_hline(aes(yintercept = geneEndPoint)) +
+      guides(color = guide_legend(title = "Conc."))
   })
 
   output$densityPlot <- renderPlot({
