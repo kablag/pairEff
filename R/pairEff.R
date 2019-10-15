@@ -1,200 +1,11 @@
-# pE <- function(dilutionRate,
-#                 dilutionDelta,
-#                RFU_i, RFU_j,
-#                cycle_i, cycle_j) {
-#   (dilutionRate ^ (((log(RFU_j, base = dilutionRate)
-#                      - log(RFU_i, base = dilutionRate)) +
-#                       dilutionDelta) /
-#                      (cycle_j - cycle_i))) - 1
-# }
-
 pE <- function(dilutionRate,
                dilutionDelta,
-               RFU_i, RFU_j,
-               cycle_i, cycle_j) {
-  (dilutionRate ^ ((log(RFU_j/RFU_i, base = dilutionRate) +
+               RFU.i, RFU.j,
+               cycle.i, cycle.j) {
+  (dilutionRate ^ ((log(RFU.j/RFU.i, base = dilutionRate) +
                       dilutionDelta) /
-                     (cycle_j - cycle_i))) - 1
+                     (cycle.j - cycle.i))) - 1
 }
-
-#' Calculates pairwise efficiency
-#'
-#' Calculates pairwise efficiency
-#'
-#' @import tidyverse
-#' @importFrom readxl read_excel
-#' @export
-pairEff <- function(filename, modtype) {
-  inptw <- read_excel(filename)
-
-  cat("Fitting models\n")
-  fits <- modlist(inptw, 1, 2:ncol(inptw),
-                  model = modtype, verbose = FALSE)
-  names(fits) <- colnames(inptw)[-1]
-
-  ncycles <- max(inptw$Cycle)
-  # lcycles <- ncycles * 4
-  # inptw <-  data.frame(Cycle = seq(1, ncycles, length.out = lcycles))
-  # for (cname in names(fits)) {
-  #   # inptw[[cname]] <- fits[[cname]]$m$predict()
-  #   inptw[[cname]] <- fits[[cname]]$m$predict(newdata = data.frame(Cycles=seq(1, ncycles,
-  #                                                                             length.out = lcycles) ))
-  # }
-
-  cat("Add conc sets\n")
-  inptl <- gather(inptw, "Well", "RFU", -Cycle)
-  inptl$conc <- rep(rep(c(100, 50, 25, 12, 6, 3), each = ncycles), 16)
-  # maxConc <- max(inptl$conc)
-  # inptl$dilution <- log(maxConc / inptl$conc, base = 2)
-  inptl$set <- rep(
-    paste0(rep(LETTERS[1:8], each = 2), c("01-06", "07-12"))
-    , each = ncycles * 6)
-
-  cat("Filter curves regions\n")
-  inptl <- inptl %>%
-    group_by(Well) %>%
-    mutate(#fTop = RFU[takeoff(fits[[Well[1]]])$top + 1],
-      #top = takeoff(fits[[Well[1]]])$top,
-      # fmidp = midpoint(fits[[Well[1]]])$f.mp,
-      # fcpD2 = efficiency(fits[[Well[1]]], type = "cpD2", plot = FALSE)$fluo,
-      # fcpD1 = efficiency(fits[[Well[1]]], type = "cpD1", plot = FALSE)$fluo
-      # ,
-      cpD2 = efficiency(fits[[Well[1]]], type = "cpD2", plot = FALSE)$cpD2,
-      cpD1 = efficiency(fits[[Well[1]]], type = "cpD1", plot = FALSE)$cpD1
-      ,
-      # usePoint = RFU >= fcpD2[1] & RFU <= fcpD1[1]) %>%
-      usePoint = Cycle >= (cpD2[1]) & Cycle <= (cpD1[1] + 1)
-      # usePoint = RFU >= (fcpD2  + fcpD2 * 0.1) &
-      #   RFU <= (fcpD1 - fcpD1 * 0.1)
-      ) %>%
-    group_by(set) %>%
-    mutate(
-      # usePoint = RFU >= (min(fmidp) * 1.1) &
-        # RFU <= (max(fcpD1) * 0.9)
-      # usePoint = RFU >= min(fmidp) & RFU <= max(fcpD1)
-      # usePoint = RFU >= (min(fcpD2) - (max(fcpD1) - min(fcpD2)) * 0.1) &
-      #   RFU <= (max(fcpD1) + (max(fcpD1) - min(fcpD2)) * 0.1)
-      # usePoint = RFU >= (min(fcpD2)  + min(fcpD2) * 0.1) &
-      #   RFU <= (max(fcpD1) - max(fcpD1) * 0.1)
-      # usePoint = Cycle >= min(cpD2) & Cycle <= max(cpD1)
-    )
-
-  finptl <- inptl %>%
-    filter(usePoint)
-
-  # finptl <- inptl %>%
-    # filter(RFU > 100 & RFU < 300)
-    # filter(RFU > 20 & RFU < 180)
-  cat("Filter pEs\n")
-  toInclude <- function(pes) {
-    pEsummary <- summary(pes)
-    pes >= pEsummary[2] & pes <= pEsummary[5]
-  }
-
-  cat("Calc pEs\n")
-  pEtbl <-
-    map_dfr(finptl$set %>% unique,
-            function(cset) {
-              fd <- finptl %>%
-                filter(set == cset) %>%
-                mutate(i = seq(n()),
-                       j = i)
-              fdi <- fd %>%
-                rename_at(vars(-i, -j), ~paste(., "i", sep = "_"))
-              fdj <- fd %>%
-                rename_at(vars(-i, -j), ~paste(., "j", sep = "_"))
-
-              expand.grid(i = seq(nrow(finptl)),
-                          j = seq(nrow(finptl))) %>%
-                filter(j > i) %>%
-                left_join(fdi, by = "i") %>%
-                rename(j = j.x) %>%
-                left_join(fdj, by = "j") %>%
-                rename(i = i.x, set = set_i) %>%
-                filter(Cycle_i != Cycle_j) %>%
-                dplyr::select(-j.y, -i.y, -set_j) %>%
-                mutate(
-                  dilutionRate = ifelse(conc_i == conc_j, # one dilution
-                                        2,
-                                        ifelse(conc_i > conc_j,
-                                               conc_i / conc_j,
-                                               conc_j / conc_i)),
-                  dilutionDelta = ifelse(conc_i == conc_j,
-                                         0,
-                                         ifelse(conc_i > conc_j,
-                                                1, -1)),
-                  pE = pE(dilutionRate,
-                            dilutionDelta,
-                            RFU_i, RFU_j,
-                            Cycle_i, Cycle_j),
-                  F0 = RFU_i / ((1 + pE) ^ Cycle_i),
-                  include = toInclude(pE)
-                )
-              # %>%
-              #   group_by(Well_i) %>%
-              #   mutate(F0 = RFU_i[pE == max(pE)] /
-              #            ((1 + max(pE)) ^ Cycle_i[pE == max(pE)]))
-            })
-
-
-  cat("Calc results\n")
-  result <- pEtbl %>%
-    # mutate(include = pE > 0.6 & pE < 1.05) %>%
-    group_by(set) %>%
-    # filter(include) %>%
-    summarise(mean_pE = mean(pE[include]),
-              sd_pE = sd(pE[include]),
-              mean_F0 = mean(F0[include]),
-              sd_F0 = sd(F0[include]),
-              totalN = n(),
-              includeN = sum(include)
-    )
-
-  for (x in 1:4) {
-    result[result$set %in%
-             paste0(rep(LETTERS[c(x, x + 4)], each = 2), c("01-06", "07-12")),
-           "group"] <- x
-  }
-
-  result <- result %>%
-    group_by(group) %>%
-    mutate(group_pE = mean(mean_pE)) %>%
-    group_by(set) %>%
-    mutate(ratio = mean_pE / group_pE)
-  list(pEtbl = pEtbl,
-       result = result,
-       inptl = inptl,
-       mods = fits)
-}
-
-detectIndividualStartPoint2 <- function(ampCurve, cycLag = 5, npoints = 4, plotResult = FALSE) {
-  # mods <- sapply(cycLag:length(ampCurve), function(cyc) {
-  mods <- sapply(cycLag:length(ampCurve), function(cyc) {
-    cycles <- 1:cyc
-    fluor <- ampCurve[cycles]
-    lm(fluor ~ cycles)$coefficients["cycles"]
-    # mod <- lm(fluor ~ cycles)
-    # predict(mod, data.frame(cycles = cyc + cycLag))
-  })
-  names(mods) <- cycLag:length(ampCurve)
-  # print(mods)
-  for (cyc in 1:(length(mods) - npoints)) {
-    tmods <- mods[cyc:(cyc + npoints)]
-    if (tmods[1] > 0 &&
-        length(unique(round(tmods, 5))) == length(tmods) &&
-        !is.unsorted(tmods)) {
-      if (plotResult) {
-        plot(ampCurve)
-        points(cyc + cycLag, ampCurve[cyc + cycLag], col = "red")
-      }
-      return(list(takeoffC = cyc + cycLag - 1,
-                  takeoffF = ampCurve[cyc + cycLag - 1]))
-    }
-  }
-}
-
-# lines(predict(lm(inptw$G11[1:9] ~ inptw$Cycle[1:9])))
-
 
 detectIndividualStartPoint <- function(fPoints, pval = 0.05, nsig = 3)
 {
@@ -213,14 +24,151 @@ detectIndividualStartPoint <- function(fPoints, pval = 0.05, nsig = 3)
   takeoffF <- fPoints[takeoffC]
   return(list(takeoffC = takeoffC, takeoffF = takeoffF))
 }
-
-detectGlobalStartPoint <- function(tbl) {
-  meanFBeforeTakeoffFs <- tbl[RFU <= takeoffF, mean(RFU)]
-  FBeforeTakeoffFs <- tbl[RFU <= takeoffF, sort(RFU)]
-  tail(FBeforeTakeoffFs[FBeforeTakeoffFs < (meanFBeforeTakeoffFs * 4)], 1) * 2
+detectGlobalStartPoint <- function(RFU, takeoffF) {
+  FBeforeTakeoffFs <- sort(RFU[RFU <= max(takeoffF)])
+  meanFBeforeTakeoffFs <- mean(FBeforeTakeoffFs)
+  tail(FBeforeTakeoffFs[FBeforeTakeoffFs <
+                          (meanFBeforeTakeoffFs * 4)], 1) * 2
 }
-detectGlobalStartPoint2 <- function(tbl) {
-  meanFBeforeTakeoffFs <- tbl[RFU <= takeoffF2, mean(RFU)]
-  FBeforeTakeoffFs <- tbl[RFU <= takeoffF2, sort(RFU)]
-  tail(FBeforeTakeoffFs[FBeforeTakeoffFs < (meanFBeforeTakeoffFs * 4)], 1) * 2
+
+detectIndividualEndPoints <- function(cycles, fPoints) {
+  der <- c(sapply(1:(length(cycles) - 1),
+                  function(i) fPoints[i + 1] - fPoints[i]), NA)
+  i <- which(der == max(der, na.rm = TRUE))
+  list(derMaxC = cycles[i], derMaxF = fPoints[i])
+}
+detectGlobalEndPoint <- function(derMaxF) {
+  mean(derMaxF)
+}
+
+#' Calculates pairwise efficiency
+#'
+#' Calculates pairwise efficiency
+#'
+#' @import magrittr data.table
+#' @importFrom readxl read_excel
+#' @importFrom moments kurtosis
+#' @export
+pairEff <- function(filename, regionStart = "gene", regionEnd = "gene") {
+  # read table
+  inptw <- data.table(read_excel(filename))
+  # convert to long format
+  wells <- colnames(inptw)[-1]
+  plateStr <- data.table(
+    well = wells,
+    conc = rep(c(100, 50, 25, 12, 6, 3), 16),
+    set = as.vector(sapply(1:16, function(i)
+      rep(paste0(wells[i * 6 - 5], "-", wells[i * 6]), 6))),
+    gene = c(sapply(1:4, function(i) rep(paste0("Gene", i), 12)),
+             sapply(1:4, function(i) rep(paste0("Gene", i), 12))),
+    stringsAsFactors = FALSE
+  )
+
+
+  inptl <- melt(inptw, id.vars = "Cycle", variable.name = "well", value.name = "RFU")
+  inptl <- inptl[plateStr, on = .(well)]
+  inptl[, plate := "plate1"]
+  if (is.numeric(regionStart)) {
+    inptl[, (c("takeoffC", "takeoffF")) := list(1, regionStart)]
+    inptl[, minStartPointC := 1]
+    inptl[, regionStart := regionStart]
+  } else {
+    inptl[, (c("takeoffC", "takeoffF")) := detectIndividualStartPoint(RFU),
+          by = well]
+    inptl[, minStartPointC := min(takeoffC, na.rm = TRUE),
+          by = regionStart]
+    inptl[, regionStart := detectGlobalStartPoint(RFU[Cycle > 5],
+                                                  takeoffF[Cycle > 5]),
+          by = regionStart]
+  }
+
+  if (is.numeric(regionEnd)) {
+    inptl[, (c("derMaxC", "derMaxF")) := list(1, regionEnd)]
+    inptl[, regionEnd := regionEnd]
+  } else {
+    inptl[, (c("derMaxC", "derMaxF")) := detectIndividualEndPoints(Cycle, RFU),
+          by = well]
+    inptl[, regionEnd := detectGlobalEndPoint(derMaxF),
+          by = regionEnd]
+  }
+
+  inptlf <- inptl[Cycle > 5 &
+                    Cycle >= minStartPointC &
+                    RFU <= regionEnd & RFU >= regionStart]
+
+  gTbl <- rbindlist(
+    lapply(unique(inptlf$set), function(setName) {
+      do.call(cbind.data.frame, Map(expand.grid,
+                                    i = inptlf[set == setName],
+                                    j = inptlf[set == setName]))
+    }
+    )
+  )
+  gTbl <- data.table(gTbl)[Cycle.i < Cycle.j][
+    , -c("set.j", "gene.j", "regionStart.j", "regionEnd.j")
+    ]
+  colnames(gTbl)[colnames(gTbl) %in% c("set.i", "gene.i", "regionStart.i", "regionEnd.i")] <-
+    c("set", "gene", "regionStart", "regionEnd")
+
+  gTbl[, ':='(dilutionRate = ifelse(conc.i == conc.j, # one dilution
+                                    2,
+                                    ifelse(conc.i > conc.j,
+                                           conc.i / conc.j,
+                                           conc.j / conc.i)),
+              dilutionDelta = ifelse(conc.i == conc.j,
+                                     0,
+                                     ifelse(conc.i > conc.j,
+                                            1, -1)))]
+
+  gTbl <- gTbl[, pE := pE(dilutionRate,
+                          dilutionDelta,
+                          RFU.i, RFU.j,
+                          Cycle.i, Cycle.j)][
+                            , ':='(mean_pE = mean(pE),
+                                   totalN = .N), by = set
+                            ][
+                              #pE > 0 &
+                              pE <= 2
+                              ]
+
+  gTbl[, pEgroup := round(pE / 0.05)]
+  gTbl[, NpEgroup := .N, by = list(set, pEgroup)]
+  gTbl <- gTbl[NpEgroup >= 5]
+  gTbl[, ':='(mean_pEf = mean(pE),
+              sd_pE2 = sd(pE),
+              includedN = .N), by = set]
+  gTbl[, F0 := RFU.i / ((1 + pE) ^ Cycle.i)][
+    , ':='(mean_F0 = mean(F0),
+           sd_F0 = sd(F0),
+           kurtosis = kurtosis(pE)),
+    by = "set"
+    ]
+  # browser()
+  gTbl[, errors := {
+    sorted <- sort(c(mean_pE[1], mean_pEf[1]))
+    paste0(
+      {if (sorted[2]/sorted[1] > 1.15)
+        "Possibly bad data: mean pE diff > 15%;"
+        else ""
+      }, {if (any(mean_F0 > regionStart[1]))
+        "Possibly bad data: F0 > working range start point;"
+        else ""
+      }, {if (kurtosis[1] < 1)
+        "Possibly bad data: excess kurtosis < 1;"
+        else ""
+      })
+  }, by = set]
+
+  res <- unique(gTbl[, .(gene, set,
+                         mean_pE, mean_pEf, sd_pE2,
+                         mean_F0, sd_F0,
+                         totalN, includedN,
+                         kurtosis,
+                         errors)],
+                by = "set")
+  list(
+    input = as.data.table(inptl),
+    pE = gTbl,
+    result = res
+  )
 }

@@ -21,6 +21,15 @@ ui <- fluidPage(
     sidebarPanel(
       fileInput("inputFile", "xls"),
       actionButton("exmplFile", "Use example file"),
+      tags$p(),
+      wellPanel(
+        selectInput("regionStart", "Region start",
+                    c("set", "gene", "plate", "manual"),
+                    "plate"),
+        selectInput("regionEnd", "Region end",
+                    c("set", "gene", "plate", "manual"),
+                    "plate")
+      ),
       width = 2
     ),
     mainPanel(
@@ -28,7 +37,13 @@ ui <- fluidPage(
         column(6,
                selectInput("pointsSet", "Set", ""),
                checkboxInput("showInRange", "Show in range points only"),
-               plotOutput("pointsPlot")),
+               plotOutput("pointsPlot", click = "pointsPlot_click",
+                          brush = "pointsPlot_brush",
+                          hover = hoverOpts("pointsPlot_hover",
+                                            delay = 100,
+                                            delayType = "debounce")),
+               uiOutput("pointsPlot_hover_info")
+        ),
         column(6,
                pickerInput("densitySets", "Sets", choices = "",
                            multiple = TRUE,

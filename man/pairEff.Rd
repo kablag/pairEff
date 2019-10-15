@@ -4,7 +4,7 @@
 \alias{pairEff}
 \title{Calculates pairwise efficiency}
 \usage{
-pairEff(filename, modtype)
+pairEff(filename, regionStart = "gene", regionEnd = "gene")
 }
 \description{
 Calculates pairwise efficiency
