@@ -1,18 +1,18 @@
 pE <- function(dilutionRate,
                dilutionDelta,
-               RFU.i, RFU.j,
-               cycle.i, cycle.j) {
-  (dilutionRate ^ ((log(RFU.j/RFU.i, base = dilutionRate) +
+               fluor.i, fluor.j,
+               cyc.i, cyc.j) {
+  (dilutionRate ^ ((log(fluor.j/fluor.i, base = dilutionRate) +
                       dilutionDelta) /
-                     (cycle.j - cycle.i))) - 1
+                     (cyc.j - cyc.i))) - 1
 }
 
 detectIndividualStartPoint <- function(fPoints, pval = 0.05, nsig = 3)
 {
-  cycles <- seq_along(fPoints)
-  res <- sapply(5:length(cycles),
+  cycs <- seq_along(fPoints)
+  res <- sapply(5:length(cycs),
                 function(i) {
-                  mod <- lm(fPoints[1:i] ~ cycles[1:i], na.action = na.exclude)
+                  mod <- lm(fPoints[1:i] ~ cycs[1:i], na.action = na.exclude)
                   1 - pt(tail(rstudent(mod), 1), df = mod$df.residual)
                 })
   sig <- sapply(res, function(x) x < pval)
@@ -24,18 +24,18 @@ detectIndividualStartPoint <- function(fPoints, pval = 0.05, nsig = 3)
   takeoffF <- fPoints[takeoffC]
   return(list(takeoffC = takeoffC, takeoffF = takeoffF))
 }
-detectGlobalStartPoint <- function(RFU, takeoffF) {
-  FBeforeTakeoffFs <- sort(RFU[RFU <= max(takeoffF)])
+detectGlobalStartPoint <- function(fluor, takeoffF) {
+  FBeforeTakeoffFs <- sort(fluor[fluor <= max(takeoffF)])
   meanFBeforeTakeoffFs <- mean(FBeforeTakeoffFs)
   tail(FBeforeTakeoffFs[FBeforeTakeoffFs <
                           (meanFBeforeTakeoffFs * 4)], 1) * 2
 }
 
-detectIndividualEndPoints <- function(cycles, fPoints) {
-  der <- c(sapply(1:(length(cycles) - 1),
+detectIndividualEndPoints <- function(cycs, fPoints) {
+  der <- c(sapply(1:(length(cycs) - 1),
                   function(i) fPoints[i + 1] - fPoints[i]), NA)
   i <- which(der == max(der, na.rm = TRUE))
-  list(derMaxC = cycles[i], derMaxF = fPoints[i])
+  list(derMaxC = cycs[i], derMaxF = fPoints[i])
 }
 detectGlobalEndPoint <- function(derMaxF) {
   mean(derMaxF)
@@ -49,36 +49,27 @@ detectGlobalEndPoint <- function(derMaxF) {
 #' @importFrom readxl read_excel
 #' @importFrom moments kurtosis
 #' @export
-pairEff <- function(filename, regionStart = "gene", regionEnd = "gene") {
-  # read table
-  inptw <- data.table(read_excel(filename))
-  # convert to long format
-  wells <- colnames(inptw)[-1]
-  plateStr <- data.table(
-    well = wells,
-    conc = rep(c(100, 50, 25, 12, 6, 3), 16),
-    set = as.vector(sapply(1:16, function(i)
-      rep(paste0(wells[i * 6 - 5], "-", wells[i * 6]), 6))),
-    gene = c(sapply(1:4, function(i) rep(paste0("Gene", i), 12)),
-             sapply(1:4, function(i) rep(paste0("Gene", i), 12))),
-    stringsAsFactors = FALSE
-  )
-
-
-  inptl <- melt(inptw, id.vars = "Cycle", variable.name = "well", value.name = "RFU")
-  inptl <- inptl[plateStr, on = .(well)]
-  inptl[, plate := "plate1"]
+pairEff <- function(rdml, regionStart = "gene", regionEnd = "gene") {
+  inptl <- rdml$GetFData(
+    rdml$AsTable(conc = sample[[react$sample$id]]$quantity$value)[sample.type == "std"],
+    long.table = TRUE)
+  # inptl <- melt(inptw, id.vars = "cyc", variable.name = "position", value.name = "fluor")
+  # inptl <- inptl[plateStr, on = .(position)]
+  inptl[, plate := exp.id]
+  tmp <- strsplit(inptl$target, "@")
+  inptl[, set := sapply(tmp, function(el) el[1])]
+  inptl[, gene := sapply(tmp, function(el) el[2])]
   if (is.numeric(regionStart)) {
     inptl[, (c("takeoffC", "takeoffF")) := list(1, regionStart)]
     inptl[, minStartPointC := 1]
     inptl[, regionStart := regionStart]
   } else {
-    inptl[, (c("takeoffC", "takeoffF")) := detectIndividualStartPoint(RFU),
-          by = well]
+    inptl[, (c("takeoffC", "takeoffF")) := detectIndividualStartPoint(fluor),
+          by = position]
     inptl[, minStartPointC := min(takeoffC, na.rm = TRUE),
           by = regionStart]
-    inptl[, regionStart := detectGlobalStartPoint(RFU[Cycle > 5],
-                                                  takeoffF[Cycle > 5]),
+    inptl[, regionStart := detectGlobalStartPoint(fluor[cyc > 5],
+                                                  takeoffF[cyc > 5]),
           by = regionStart]
   }
 
@@ -86,15 +77,15 @@ pairEff <- function(filename, regionStart = "gene", regionEnd = "gene") {
     inptl[, (c("derMaxC", "derMaxF")) := list(1, regionEnd)]
     inptl[, regionEnd := regionEnd]
   } else {
-    inptl[, (c("derMaxC", "derMaxF")) := detectIndividualEndPoints(Cycle, RFU),
-          by = well]
+    inptl[, (c("derMaxC", "derMaxF")) := detectIndividualEndPoints(cyc, fluor),
+          by = position]
     inptl[, regionEnd := detectGlobalEndPoint(derMaxF),
           by = regionEnd]
   }
 
-  inptlf <- inptl[Cycle > 5 &
-                    Cycle >= minStartPointC &
-                    RFU <= regionEnd & RFU >= regionStart]
+  inptlf <- inptl[cyc > 5 &
+                    cyc >= minStartPointC &
+                    fluor <= regionEnd & fluor >= regionStart]
 
   gTbl <- rbindlist(
     lapply(unique(inptlf$set), function(setName) {
@@ -104,7 +95,7 @@ pairEff <- function(filename, regionStart = "gene", regionEnd = "gene") {
     }
     )
   )
-  gTbl <- data.table(gTbl)[Cycle.i < Cycle.j][
+  gTbl <- data.table(gTbl)[cyc.i < cyc.j][
     , -c("set.j", "gene.j", "regionStart.j", "regionEnd.j")
     ]
   colnames(gTbl)[colnames(gTbl) %in% c("set.i", "gene.i", "regionStart.i", "regionEnd.i")] <-
@@ -122,8 +113,8 @@ pairEff <- function(filename, regionStart = "gene", regionEnd = "gene") {
 
   gTbl <- gTbl[, pE := pE(dilutionRate,
                           dilutionDelta,
-                          RFU.i, RFU.j,
-                          Cycle.i, Cycle.j)][
+                          fluor.i, fluor.j,
+                          cyc.i, cyc.j)][
                             , ':='(mean_pE = mean(pE),
                                    totalN = .N), by = set
                             ][
@@ -137,7 +128,7 @@ pairEff <- function(filename, regionStart = "gene", regionEnd = "gene") {
   gTbl[, ':='(mean_pEf = mean(pE),
               sd_pE2 = sd(pE),
               includedN = .N), by = set]
-  gTbl[, F0 := RFU.i / ((1 + pE) ^ Cycle.i)][
+  gTbl[, F0 := fluor.i / ((1 + pE) ^ cyc.i)][
     , ':='(mean_F0 = mean(F0),
            sd_F0 = sd(F0),
            kurtosis = kurtosis(pE)),
