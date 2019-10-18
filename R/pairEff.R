@@ -2,7 +2,7 @@ pE <- function(dilutionRate,
                dilutionDelta,
                fluor.i, fluor.j,
                cyc.i, cyc.j) {
-  (dilutionRate ^ ((log(fluor.j/fluor.i, base = dilutionRate) +
+  (dilutionRate ^ ((log(fluor.j / fluor.i, base = dilutionRate) +
                       dilutionDelta) /
                      (cyc.j - cyc.i))) - 1
 }
@@ -134,7 +134,6 @@ pairEff <- function(rdml, regionStart = "gene", regionEnd = "gene") {
            kurtosis = kurtosis(pE)),
     by = "set"
     ]
-  # browser()
   gTbl[, errors := {
     sorted <- sort(c(mean_pE[1], mean_pEf[1]))
     paste0(

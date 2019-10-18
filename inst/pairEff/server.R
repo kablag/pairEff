@@ -114,7 +114,7 @@ shinyServer(function(input, output, session) {
       req(pEff())
       inptl <- pEff()$input
       if (input$showInRange)
-        inptl <- inptl[RFU <= regionEnd & RFU >= regionStart]
+        inptl <- inptl[fluor <= regionEnd & fluor >= regionStart]
       inptl[set == input$pointsSet]
     })
 
